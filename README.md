@@ -47,7 +47,7 @@ A network IP address or serial device port of the device to install
 
 ### hard
 
-This option will trigger a full wipe of the device, device firmware upgrade, followed by installation of the edaphic system to the device. Requires the [address](#address) indicating serial device.
+This option will trigger a full wipe of the device, device firmware upgrade, followed by installation of the edaphic system to the device. Requires the [address option](#address) indicating a serial port for the device.
 
 ## Task Scheduler
 
