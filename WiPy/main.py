@@ -1,5 +1,5 @@
 from machine import reset
-from FiPyFunctions import FlashingLight, LED_RED, LED_OFF, simple_connect
+from WiPyFunctions import FlashingLight, LED_RED, LED_OFF, simple_connect
 from GoldenFightFi import GoldenFight
 import time
 from sys import print_exception
