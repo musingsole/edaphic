@@ -1,11 +1,13 @@
+import _thread
 import socket
 from network import WLAN
+import ssl
 
 
 not_configured_response = """HTTP/1.1 404 Not Found
 Content-Type: text/html
 Connection: close
-Server: GoldenFight
+Server: edaphic
 
 Endpoint not found"""
 
@@ -14,7 +16,7 @@ success = """HTTP/1.1 200 OK
 Content-Type: text/html
 Connection: close
 Access-Control-Allow-Origin: *
-Server: GoldenFight
+Server: edaphic
 
 Successful Operation
 """
@@ -24,7 +26,7 @@ failure = """HTTP/1.1 502 OK
 Content-Type: text/html
 Connection: close
 Access-Control-Allow-Origin: *
-Server: GoldenFight
+Server: edaphic
 
 Operation Failed
 """
@@ -78,32 +80,47 @@ def parse_querystring(qs):
     return parameters
 
 
-# TODO: Implement as threading system
-def http_daemon(ssid="Jormunitor",
-                password="Jormunitor",
-                host_ip="192.168.4.1",
-                path_to_handler={},
-                lock=None,
-                log=lambda msg: print(msg)):
+def set_wlan_to_access_point(
+    ssid="wipy_https_server",
+    password="micropython",
+    host_ip="192.168.4.1",
+    log=lambda msg: None
+):
     log("Creating Access Point {} with password {}".format(ssid, password))
-    log("User will need to connect to the webpage at {}".format(host_ip))
-
     wlan = WLAN()
     wlan.deinit()
     wlan.ifconfig(config=(host_ip, '255.255.255.0', '0.0.0.0', '8.8.8.8'))
     wlan.init(mode=WLAN.AP, ssid=ssid, auth=(WLAN.WPA2, password), channel=5, antenna=WLAN.INT_ANT)
 
+    return wlan
+
+
+# TODO: Implement as threading system
+def http_daemon(ssid="wipy_https_server",
+                password="micropython",
+                use_ssl=True,
+                path_to_handler={},
+                lock=None,
+                log=lambda msg: print(msg)):
     s = socket.socket()
-    address = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
-    s.bind(address)
+
+    if use_ssl:
+        s = ssl.wrap_socket(
+            s,
+            server_side=True,
+            keyfile="server.pem",
+            certfile="cert.pem")
+        port = 443
+    else:
+        port = 80
+
+    s.bind(('0.0.0.0', port))
 
     s.listen(5)
-    log('listening on {}'.format(address))
-
     while lock is None or not lock.locked():
         conn, address = s.accept()
-	
-	try:
+
+        try:
             log('New connection from {}'.format(address))
             conn.setblocking(False)
 
@@ -117,14 +134,15 @@ def http_daemon(ssid="Jormunitor",
                 raise Exception("Malformated HTTP request.")
 
             log("Spawn thread to handle message")
-            _thread.start_new_thread(process_message_and_response, (msg, conn))
+            _thread.start_new_thread(process_message_and_response, (msg, conn, path_to_handler))
 
         except Exception as e:
             log("Request processing failure: {}".format(e))
             conn.send(failure)
             conn.close()
 
-def process_message_and_response(message, conn):
+
+def process_message_and_response(message, conn, path_to_handler={}, log=print):
     try:
         blank_line_split = message.split('\n\n')
         preamble = blank_line_split[0].split("\n")
@@ -132,33 +150,33 @@ def process_message_and_response(message, conn):
         request_keys = ["method", "path", "version"]
         request_key_value = zip(request_keys, request.split(" "))
         request = {key: value for key, value in request_key_value}
-    
+
         headers = preamble[1:]
         headers = {line.split(":")[0].strip(): line.split(":")[1].strip() for line in headers}
-    
+
         for key, value in headers.items():
-    	     request[key] = value
-    
+            request[key] = value
+
         log("Received Request:\n{}".format(request))
-    
+
         request['body'] = blank_line_split[1]
         if 'Content-Length' in request:
-    	    content_length = int(request['Content-Length'])
-    
-    	if len(request['body']) < content_length:
-    	    log("Attempting to retrieve {} ({} remaining) bytes of content".format(content_length, content_length - len(request['body'])))
-    	    while len(request['body']) != content_length:
-    		new_segment = conn.recv(MAX_HTTP_MESSAGE_LENGTH).decode()
-    		request['body'] += new_segment
-    
+            content_length = int(request['Content-Length'])
+
+        if len(request['body']) < content_length:
+            log("Attempting to retrieve {} ({} remaining) bytes of content".format(content_length, content_length - len(request['body'])))
+            while len(request['body']) != content_length:
+                new_segment = conn.recv(MAX_HTTP_MESSAGE_LENGTH).decode()
+                request['body'] += new_segment
+
         if request['path'] not in path_to_handler:
-    	    log("{} not found in path_to_handler".format(request['path']))
-    	    response = not_configured_response
+            log("{} not found in path_to_handler".format(request['path']))
+            response = not_configured_response
         else:
             endpoint_handler = path_to_handler[request['path']]
             log("Path found. Passing to {}".format(endpoint_handler))
             response = endpoint_handler(**request)
-        
+
             log("Sending response")
             conn.send(response)
             conn.close()
@@ -172,7 +190,7 @@ def build_response(status_code=200, body=''):
     base = """Content-Type: text/html
 Connection: close
 Access-Control-Allow-Origin: *
-Server: GoldenFight
+Server: edaphic
 
 """
 
