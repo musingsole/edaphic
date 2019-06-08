@@ -1,7 +1,6 @@
 import _thread
 import socket
 from network import WLAN
-import ssl
 
 
 not_configured_response = """HTTP/1.1 404 Not Found
@@ -98,22 +97,11 @@ def set_wlan_to_access_point(
 # TODO: Implement as threading system
 def http_daemon(ssid="wipy_https_server",
                 password="micropython",
-                use_ssl=True,
                 path_to_handler={},
                 lock=None,
                 log=lambda msg: print(msg)):
     s = socket.socket()
-
-    if use_ssl:
-        s = ssl.wrap_socket(
-            s,
-            server_side=True,
-            keyfile="server.pem",
-            certfile="cert.pem")
-        port = 443
-    else:
-        port = 80
-
+    port = 80
     s.bind(('0.0.0.0', port))
 
     s.listen(5)
