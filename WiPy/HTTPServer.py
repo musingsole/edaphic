@@ -94,14 +94,11 @@ def set_wlan_to_access_point(
     return wlan
 
 
-# TODO: Implement as threading system
-def http_daemon(ssid="wipy_https_server",
-                password="micropython",
-                path_to_handler={},
+def http_daemon(path_to_handler={},
+                port=80,
                 lock=None,
                 log=lambda msg: print(msg)):
     s = socket.socket()
-    port = 80
     s.bind(('0.0.0.0', port))
 
     s.listen(5)
